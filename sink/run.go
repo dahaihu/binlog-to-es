@@ -73,7 +73,6 @@ func (s *Sync) run() {
 				}
 				req.Add(doc)
 			}
-			log.Info(req.BodyAsString())
 			if resp, err := req.Do(context.Background()); err != nil {
 				log.Errorf("req es err %err", err)
 			} else {
