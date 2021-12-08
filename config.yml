@@ -1,0 +1,38 @@
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: ""
+elasticsearch:
+  host: 127.0.0.1
+  port: 7200
+  bulk_size: 500
+  flush_interval: 100
+database_rules:
+  - database: sync_es
+    table_rules:
+      - table: es_resource
+        index: es_resource
+        doc_id: id
+        sync_fields:
+          - name
+          - description
+          - create_time
+          - update_time
+          - delete_time
+        field_mappings:
+          - mysql_field: create_time
+            es_field: created
+          - mysql_field: update_time
+            es_field: updated
+          - mysql_filed:  delete_time
+            es_field: deleted
+      - table: es_resource_role
+        index: es_resource
+        doc_id: resource_id
+        nested:
+          primary_key: user_id
+          nested_field: user_role
+        sync_fields:
+          - user_id
+          - role_id
