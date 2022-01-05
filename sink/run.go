@@ -12,80 +12,123 @@ import (
 )
 
 type Sync struct {
-	PositionManager Position
-	BulkSize        int64
-	FlushInterval   int64
-	Client          *es.Client
-	Queue           chan *msg
+	ctx             context.Context
+	done            chan struct{}
+	positionManager Position
+	bulkSize        int
+	flushInterval   int
+	client          *es.Client
+	queue           chan *msg
+	requestQueue    []*rule.ElasticsearchReq
 }
 
-func NewSync(flushInterval, bulkSize int64, position Position) *Sync {
+func NewSync(
+	ctx context.Context, done chan struct{},
+	flushInterval, bulkSize int, position Position) *Sync {
 	client, _ := es.NewClient()
 	s := &Sync{
-		PositionManager: position,
-		BulkSize:        bulkSize,
-		FlushInterval:   flushInterval,
-		Client:          client,
-		Queue:           make(chan *msg, bulkSize),
+		ctx:             ctx,
+		done:            done,
+		positionManager: position,
+		bulkSize:        bulkSize,
+		flushInterval:   flushInterval,
+		client:          client,
+		queue:           make(chan *msg, bulkSize),
+		requestQueue:    make([]*rule.ElasticsearchReq, 0, bulkSize*10),
 	}
 	go s.run()
 	return s
 }
 
+func (s *Sync) cacheMsg(m *msg) error {
+	select {
+	case s.queue <- m:
+		return nil
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	}
+}
+
+func (s *Sync) flush() error {
+	if len(s.requestQueue) == 0 {
+		return nil
+	}
+	req := s.client.Bulk()
+	for _, item := range s.requestQueue {
+		log.Infof("item is %v", *item)
+		var doc es.BulkableRequest
+		switch item.Action {
+		case ESActionCreate, ESActionUpdate:
+			doc = es.NewBulkIndexRequest().Index(item.Index).
+				Id(item.ID).OpType(item.Action).Doc(item.Data)
+		case ESActionDelete:
+			doc = es.NewBulkDeleteRequest().Index(item.Index).
+				Id(item.ID)
+		default:
+			log.Fatal(item.Action)
+		}
+		req.Add(doc)
+	}
+	if _, err := req.Do(context.Background()); err != nil {
+		// todo report error, and which error should return
+		log.Errorf("req es err %err", err)
+	}
+	s.requestQueue = s.requestQueue[:0]
+	return nil
+}
+
 func (s *Sync) run() {
-	interval := time.Millisecond * time.Duration(s.FlushInterval)
+	// todo send sig to done
+	interval := time.Millisecond * time.Duration(s.flushInterval)
 	t := time.NewTicker(interval)
-	syncQueue := make([]*rule.ElasticsearchReq, 0, s.BulkSize*10)
-	var flush bool
+	defer func() { s.done <- struct{}{} }()
+	var (
+		flush bool
+		save  bool
+		exit  bool
+	)
 	for {
 		select {
 		case <-t.C:
-			if len(syncQueue) > 0 {
+			if len(s.requestQueue) > 0 {
 				flush = true
 			}
-		case item := <-s.Queue:
+		case item := <-s.queue:
 			switch item.msgType {
 			case MsgElasticsearch:
-				syncQueue = append(syncQueue, item.Elasticsearch)
-				if len(syncQueue) >= 100 {
+				s.requestQueue = append(s.requestQueue, item.Elasticsearch)
+				if len(s.requestQueue) >= s.bulkSize {
 					flush = true
 					// 避免数据flush之后，立刻到达tick的时间，然后继续执行flush
 					t.Reset(interval)
 				}
 			case MsgMysqlPosition:
-				s.PositionManager.Update(item.MysqlPosition)
+				if needSave := s.positionManager.Update(item.MysqlPosition); needSave {
+					save = true
+				}
 			}
+		case <-s.ctx.Done():
+			exit = true
+		}
+		if exit {
+			if err := s.flush(); err != nil {
+				log.Error("exist flush err is ", err)
+			}
+			if err := s.positionManager.Save(); err != nil {
+				log.Error("exist save position err", err)
+			}
+			return
 		}
 		if flush {
-			req := s.Client.Bulk()
-			for _, item := range syncQueue {
-				log.Infof("item is %v", *item)
-				var doc es.BulkableRequest
-				switch item.Action {
-				case ESActionCreate, ESActionUpdate:
-					doc = es.NewBulkIndexRequest().Index(item.Index).
-						Id(item.ID).OpType(item.Action).Doc(item.Data)
-				case ESActionDelete:
-					doc = es.NewBulkDeleteRequest().Index(item.Index).
-						Id(item.ID)
-				default:
-					log.Fatal(item.Action)
-				}
-				req.Add(doc)
-			}
-			if resp, err := req.Do(context.Background()); err != nil {
-				log.Errorf("req es err %err", err)
-			} else {
-				for _, item := range resp.Failed() {
-					log.Infof("failed %v", *item)
-					log.Infof("failed reason is %v", *item.Error)
-				}
-				log.Infof("took %d", resp.Took)
-			}
-			log.Infof("flush %d docs", len(syncQueue))
+			_ = s.flush()
 			flush = false
-			syncQueue = syncQueue[0:0]
-			log.Info("position is ", s.PositionManager.Read())
+			log.Info("position is ", s.positionManager.Read())
+		}
+		if save {
+			if err := s.positionManager.Save(); err != nil {
+				log.Error("save position err", err)
+			}
+			save = false
 		}
 	}
 }

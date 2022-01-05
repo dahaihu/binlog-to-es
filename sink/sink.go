@@ -1,6 +1,7 @@
 package sink
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -55,18 +56,15 @@ func newElasticsearchMsg(req *rule.ElasticsearchReq) *msg {
 
 type Handler struct {
 	canal.DummyEventHandler
-
+	ctx        context.Context
 	tableRules map[string]rule.Rule
-
-	sync  *Sync
-	canal *canal.Canal
+	sync       *Sync
+	canal      *canal.Canal
 }
 
-func NewHandler(
-	cfg *config.Config,
-	sync *Sync,
-	canal *canal.Canal,
-) (*Handler, error) {
+func NewHandler(cfg *config.Config, sync *Sync, canal *canal.Canal) (
+	*Handler, error,
+) {
 	handler := new(Handler)
 	handler.sync = sync
 	handler.canal = canal
@@ -110,20 +108,18 @@ func (h *Handler) OnRotate(e *replication.RotateEvent) error {
 		Name: string(e.NextLogName),
 		Pos:  uint32(e.Position),
 	}
-
-	h.sync.Queue <- newMysqlPositionMsg(pos)
-
-	return nil
+	log.Infof("on rotate event: new position", *pos)
+	return h.sync.cacheMsg(newMysqlPositionMsg(pos))
 }
 
 func (h *Handler) OnDDL(nextPos mysql.Position, _ *replication.QueryEvent) error {
-	h.sync.Queue <- newMysqlPositionMsg(&nextPos)
-	return nil
+	log.Infof("on ddl event: new position", nextPos)
+	return h.sync.cacheMsg(newMysqlPositionMsg(&nextPos))
 }
 
 func (h *Handler) OnXID(nextPos mysql.Position) error {
-	h.sync.Queue <- newMysqlPositionMsg(&nextPos)
-	return nil
+	log.Infof("on xid event: new position", nextPos)
+	return h.sync.cacheMsg(newMysqlPositionMsg(&nextPos))
 }
 
 func (h *Handler) OnTableChanged(database, table string) error {
@@ -143,7 +139,9 @@ func (h *Handler) OnRow(e *canal.RowsEvent) error {
 			if err != nil {
 				log.Fatal("")
 			}
-			h.sync.Queue <- newElasticsearchMsg(esReq)
+			if err := h.sync.cacheMsg(newElasticsearchMsg(esReq)); err != nil {
+				return err
+			}
 		}
 	default:
 		var (
@@ -162,7 +160,9 @@ func (h *Handler) OnRow(e *canal.RowsEvent) error {
 			if err != nil {
 				return err
 			}
-			h.sync.Queue <- newElasticsearchMsg(esReq)
+			if err := h.sync.cacheMsg(newElasticsearchMsg(esReq)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

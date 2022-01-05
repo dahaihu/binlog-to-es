@@ -3,73 +3,85 @@ package sink
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-mysql-org/go-mysql/mysql"
 	"io/ioutil"
 	"os"
+	"time"
+
+	"github.com/go-mysql-org/go-mysql/mysql"
 )
 
 type Position interface {
 	Load() (*mysql.Position, error)
 	Read() *mysql.Position
-	Update(*mysql.Position) error
+	Update(*mysql.Position) (saved bool)
 	Save() error
 }
 
 type defaultPosition struct {
-	Path string
+	saveInterval time.Duration
+	lastSaveTime time.Time
+	path         string
 
-	Position *mysql.Position
+	position *mysql.Position
 }
 
-func NewPositionManager(path string) Position {
+func NewPositionManager(path string, flushInterval time.Duration) Position {
+	if flushInterval == 0 {
+		flushInterval = 200 * time.Millisecond
+	}
 	return &defaultPosition{
-		Path: path,
-		Position: &mysql.Position{
+		path: path,
+		position: &mysql.Position{
 			Name: "",
 			Pos:  0,
 		},
+		// save every 200ms
+		saveInterval: flushInterval,
 	}
 }
 
 func (p *defaultPosition) Load() (*mysql.Position, error) {
-	file, err := os.Open(p.Path)
+	file, err := os.Open(p.path)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	defer func() {_ = file.Close()} ()
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	var pos mysql.Position
-	if err := json.Unmarshal(content, &pos); err != nil {
+	pos := new(mysql.Position)
+	if err := json.Unmarshal(content, pos); err != nil {
 		return nil, err
 	}
-	return &pos, nil
+	p.position = pos
+	p.lastSaveTime = time.Now()
+	return pos, nil
 }
 
-func (p *defaultPosition) Update(pos *mysql.Position) error {
-	p.Position = pos
-	return nil
+func (p *defaultPosition) Update(pos *mysql.Position) (saved bool) {
+	p.position = pos
+	return time.Now().After(p.lastSaveTime.Add(p.saveInterval))
 }
 
 func (p *defaultPosition) Save() error {
-	content, err := json.Marshal(p.Position)
+	content, err := json.Marshal(p.position)
 	if err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(p.Path, content, 0644); err != nil {
+	if err := ioutil.WriteFile(p.path, content, 0644); err != nil {
 		return err
 	}
+	p.lastSaveTime = time.Now()
 	return nil
 }
 
 func (p *defaultPosition) Read() *mysql.Position {
-	return p.Position
+	return p.position
 }
 
 func (p *defaultPosition) String() string {
 	return fmt.Sprintf("binlog file: %s, position: %d;",
-		p.Position.Name, p.Position.Pos)
+		p.position.Name, p.position.Pos)
 }

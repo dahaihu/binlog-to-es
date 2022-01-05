@@ -1,7 +1,6 @@
 package rule
 
 import (
-
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -10,13 +9,6 @@ import (
 	"binlog-to-es/utils"
 
 	"github.com/go-mysql-org/go-mysql/schema"
-)
-
-type Type int
-
-const (
-	Normal Type = iota
-	Nested
 )
 
 type ElasticsearchReq struct {
@@ -113,12 +105,11 @@ func (r *baseRule) makeUpdateData(oldRow, newRow []interface{}) (
 	map[string]interface{},
 ) {
 	data := make(map[string]interface{})
-	for idx, _ := range oldRow {
+	for idx, oldValue := range oldRow {
 		column := r.Columns[idx]
 		if r.filter(column) {
 			continue
 		}
-		oldValue := oldRow[idx]
 		newValue := newRow[idx]
 		if reflect.DeepEqual(oldValue, newValue) {
 			continue

@@ -28,8 +28,8 @@ type Nested struct {
 type Elasticsearch struct {
 	Host          string `yaml:"host"`
 	Port          int64  `yaml:"port"`
-	BulkSize      int64  `yaml:"bulk_size"`
-	FlushInterval int64  `yaml:"flush_interval"`
+	BulkSize      int    `yaml:"bulk_size"`
+	FlushInterval int    `yaml:"flush_interval"`
 }
 
 type FieldMapping struct {
