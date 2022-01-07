@@ -112,8 +112,12 @@ func (s *Sync) run() {
 					t.Reset(interval)
 				}
 			case MsgMysqlPosition:
-				if needSave := s.positionManager.Update(item.MysqlPosition); needSave {
-					save = true
+				if savePosition := item.MysqlPosition.saves(); savePosition {
+					flush = true
+				} else {
+					if needSave := s.positionManager.Update(&item.MysqlPosition.Position); needSave {
+						save = true
+					}
 				}
 			}
 		case <-s.ctx.Done():

@@ -21,8 +21,7 @@ type defaultPosition struct {
 	saveInterval time.Duration
 	lastSaveTime time.Time
 	path         string
-
-	position *mysql.Position
+	position     *mysql.Position
 }
 
 func NewPositionManager(path string, flushInterval time.Duration) Position {

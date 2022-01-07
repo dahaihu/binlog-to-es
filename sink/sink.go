@@ -37,13 +37,26 @@ type msg struct {
 	msgType
 
 	Elasticsearch *rule.ElasticsearchReq
-	MysqlPosition *mysql.Position
+	MysqlPosition *MysqlPosition
 }
 
-func newMysqlPositionMsg(position *mysql.Position) *msg {
+type MysqlPosition struct {
+	mysql.Position
+
+	save bool
+}
+
+func (p *MysqlPosition) saves() bool {
+	return p.save
+}
+
+func newMysqlPositionMsg(position mysql.Position, save bool) *msg {
 	return &msg{
-		msgType:       MsgMysqlPosition,
-		MysqlPosition: position,
+		msgType: MsgMysqlPosition,
+		MysqlPosition: &MysqlPosition{
+			Position: position,
+			save:     save,
+		},
 	}
 }
 
@@ -104,22 +117,22 @@ func (h *Handler) setRuleTableInfo(database, table string) error {
 }
 
 func (h *Handler) OnRotate(e *replication.RotateEvent) error {
-	pos := &mysql.Position{
+	pos := mysql.Position{
 		Name: string(e.NextLogName),
 		Pos:  uint32(e.Position),
 	}
-	log.Infof("on rotate event: new position", *pos)
-	return h.sync.cacheMsg(newMysqlPositionMsg(pos))
+	log.Infof("on rotate event: new position", pos)
+	return h.sync.cacheMsg(newMysqlPositionMsg(pos, true))
 }
 
 func (h *Handler) OnDDL(nextPos mysql.Position, _ *replication.QueryEvent) error {
 	log.Infof("on ddl event: new position", nextPos)
-	return h.sync.cacheMsg(newMysqlPositionMsg(&nextPos))
+	return h.sync.cacheMsg(newMysqlPositionMsg(nextPos, true))
 }
 
 func (h *Handler) OnXID(nextPos mysql.Position) error {
 	log.Infof("on xid event: new position", nextPos)
-	return h.sync.cacheMsg(newMysqlPositionMsg(&nextPos))
+	return h.sync.cacheMsg(newMysqlPositionMsg(nextPos, false))
 }
 
 func (h *Handler) OnTableChanged(database, table string) error {
