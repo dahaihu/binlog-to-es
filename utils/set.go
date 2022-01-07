@@ -1,6 +1,5 @@
 package utils
 
-
 type Set map[string]struct{}
 
 func NewSet(values []string) Set {

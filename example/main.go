@@ -16,14 +16,13 @@ import (
 
 func main() {
 	canalConfig := canal.NewDefaultConfig()
-	canalConfig.Addr = "127.0.0.1:3306"
-	canalConfig.User = "root"
-	canalConfig.Password = "669193"
-
 	config, err := config.ReadConfig("./config.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
+	canalConfig.Addr = config.Mysql.Addr
+	canalConfig.User = config.Mysql.User
+	canalConfig.Password = config.Mysql.Password
 	canal, err := canal.NewCanal(canalConfig)
 	if err != nil {
 		log.Fatal(err)
@@ -40,13 +39,11 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	go func () {
-		select {
-		case sig := <- sigs:
-			log.Error("get sig ", sig)
-			cancel()
-			canal.Close()
-		}
+	go func() {
+		sig := <-sigs
+		log.Error("get sig ", sig)
+		cancel()
+		canal.Close()
 	}()
 	handler, err := sink.NewHandler(
 		config,

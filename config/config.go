@@ -1,20 +1,13 @@
 package config
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
-)
 
-type RuleType string
-
-const (
-	RuleNormal = "normal"
-	RuleNested = "nested"
+	"gopkg.in/yaml.v2"
 )
 
 type Mysql struct {
-	Host     string `yaml:"host"`
-	Port     int64  `yaml:"port"`
+	Addr     string `yaml:"addr"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
 }

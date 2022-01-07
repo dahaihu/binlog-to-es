@@ -1,11 +1,10 @@
 mysql:
-  host: 127.0.0.1
-  port: 3306
+  addr: 127.0.0.1:3306
   user: root
   password: ""
 elasticsearch:
   host: 127.0.0.1
-  port: 7200
+  port: 9200
   bulk_size: 500
   flush_interval: 500
 database_rules:

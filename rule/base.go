@@ -18,7 +18,6 @@ type ElasticsearchReq struct {
 	Data   string
 }
 
-
 type baseRule struct {
 	config.TableRule
 
@@ -101,9 +100,7 @@ func (r *baseRule) makeCreateData(row []interface{}) map[string]interface{} {
 	return data
 }
 
-func (r *baseRule) makeUpdateData(oldRow, newRow []interface{}) (
-	map[string]interface{},
-) {
+func (r *baseRule) makeUpdateData(oldRow, newRow []interface{}) map[string]interface{} {
 	data := make(map[string]interface{})
 	for idx, oldValue := range oldRow {
 		column := r.Columns[idx]

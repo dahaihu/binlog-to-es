@@ -45,7 +45,7 @@ func (p *defaultPosition) Load() (*mysql.Position, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {_ = file.Close()} ()
+	defer func() { _ = file.Close() }()
 	content, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, err

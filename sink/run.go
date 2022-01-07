@@ -2,11 +2,13 @@ package sink
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"binlog-to-es/rule"
-	. "binlog-to-es/utils"
+	"binlog-to-es/utils"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	es "github.com/olivere/elastic/v7"
 	log "github.com/sirupsen/logrus"
 )
@@ -19,13 +21,20 @@ type Sync struct {
 	flushInterval   int
 	client          *es.Client
 	queue           chan *msg
-	requestQueue    []*rule.ElasticsearchReq
+	// position process
+	savePosition *mysql.Position
+	prePosition  *mysql.Position
+	lastPosition *mysql.Position
+	requestQueue []*rule.ElasticsearchReq
 }
 
 func NewSync(
 	ctx context.Context, done chan struct{},
 	flushInterval, bulkSize int, position Position) *Sync {
-	client, _ := es.NewClient()
+	client, err := es.NewClient()
+	if err != nil {
+		panic(fmt.Errorf("es client init err %v", err))
+	}
 	s := &Sync{
 		ctx:             ctx,
 		done:            done,
@@ -58,10 +67,10 @@ func (s *Sync) flush() error {
 		log.Infof("item is %v", *item)
 		var doc es.BulkableRequest
 		switch item.Action {
-		case ESActionCreate, ESActionUpdate:
+		case utils.ESActionCreate, utils.ESActionUpdate:
 			doc = es.NewBulkIndexRequest().Index(item.Index).
 				Id(item.ID).OpType(item.Action).Doc(item.Data)
-		case ESActionDelete:
+		case utils.ESActionDelete:
 			doc = es.NewBulkDeleteRequest().Index(item.Index).
 				Id(item.ID)
 		default:
@@ -120,6 +129,7 @@ func (s *Sync) run() {
 			return
 		}
 		if flush {
+			// every flush save position
 			_ = s.flush()
 			flush = false
 			log.Info("position is ", s.positionManager.Read())
