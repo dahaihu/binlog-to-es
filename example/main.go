@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"binlog-to-es/config"
+	"binlog-to-es/position"
 	"binlog-to-es/sink"
 
 	"github.com/go-mysql-org/go-mysql/canal"
@@ -15,11 +16,11 @@ import (
 )
 
 func main() {
-	canalConfig := canal.NewDefaultConfig()
-	config, err := config.ReadConfig("./config.yml")
+	config, err := config.ReadConfig("example/config.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
+	canalConfig := canal.NewDefaultConfig()
 	canalConfig.Addr = config.Mysql.Addr
 	canalConfig.User = config.Mysql.User
 	canalConfig.Password = config.Mysql.Password
@@ -27,8 +28,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	positionHandler := sink.NewPositionManager("position.json",
-		time.Duration(config.Elasticsearch.FlushInterval))
+	positionHandler := position.NewPositionManager("example/position.json",
+		time.Duration(config.PositionSaveInterval)*time.Millisecond)
 	position, err := positionHandler.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -41,7 +42,7 @@ func main() {
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	go func() {
 		sig := <-sigs
-		log.Error("get sig ", sig)
+		log.Error("exit with sig ", sig)
 		cancel()
 		canal.Close()
 	}()

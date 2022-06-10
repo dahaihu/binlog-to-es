@@ -4,7 +4,7 @@ import (
 	"binlog-to-es/utils"
 )
 
-func (r *baseRule) MakeESCreateData(row []interface{}) (
+func (r *baseRule) MakeCreateData(row []interface{}) (
 	*ElasticsearchReq, error,
 ) {
 	id, data, err := r.makeCreateDoc(row)
@@ -15,11 +15,11 @@ func (r *baseRule) MakeESCreateData(row []interface{}) (
 		Action: utils.ESActionCreate,
 		Index:  r.Index,
 		ID:     id,
-		Data:   r.Marshal(data),
+		Data:   data,
 	}, nil
 }
 
-func (r *baseRule) MakeESUpdateData(
+func (r *baseRule) MakeUpdateData(
 	oldRow, newRow []interface{},
 ) (*ElasticsearchReq, error) {
 	id, err := r.docID(newRow)
@@ -31,11 +31,11 @@ func (r *baseRule) MakeESUpdateData(
 		Action: utils.ESActionUpdate,
 		Index:  r.Index,
 		ID:     id,
-		Data:   r.Marshal(data),
+		Data:   data,
 	}, nil
 }
 
-func (r *baseRule) MakeESDeleteData(row []interface{}) (
+func (r *baseRule) MakeDeleteData(row []interface{}) (
 	*ElasticsearchReq, error,
 ) {
 	id, err := r.docID(row)
@@ -46,6 +46,5 @@ func (r *baseRule) MakeESDeleteData(row []interface{}) (
 		Action: utils.ESActionDelete,
 		Index:  r.Index,
 		ID:     id,
-		Data:   "",
 	}, nil
 }

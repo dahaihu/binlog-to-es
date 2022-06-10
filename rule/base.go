@@ -1,7 +1,6 @@
 package rule
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -15,7 +14,8 @@ type ElasticsearchReq struct {
 	Action string
 	Index  string
 	ID     string
-	Data   string
+	Data   map[string]interface{}
+	Script string
 }
 
 type baseRule struct {
@@ -44,10 +44,6 @@ func NewRule(config config.TableRule) Rule {
 	return &rule
 }
 
-func (r *baseRule) Marshal(data map[string]interface{}) string {
-	rawData, _ := json.Marshal(data)
-	return string(rawData)
-}
 
 func (r *baseRule) SetTableInfo(tableInfo *schema.Table) {
 	r.TableInfo = tableInfo
@@ -81,7 +77,7 @@ func (r *baseRule) filter(column string) bool {
 	return !r.SyncedFieldsSet.Contains(column)
 }
 
-func (r *baseRule) esField(column string) string {
+func (r *baseRule) fieldKey(column string) string {
 	fieldMap, ok := r.FieldMapping[column]
 	if ok {
 		return fieldMap
@@ -95,7 +91,7 @@ func (r *baseRule) makeCreateData(row []interface{}) map[string]interface{} {
 		if r.filter(column) {
 			continue
 		}
-		data[r.esField(column)] = row[idx]
+		data[r.fieldKey(column)] = row[idx]
 	}
 	return data
 }
@@ -104,14 +100,16 @@ func (r *baseRule) makeUpdateData(oldRow, newRow []interface{}) map[string]inter
 	data := make(map[string]interface{})
 	for idx, oldValue := range oldRow {
 		column := r.Columns[idx]
+		// only update necessary field
 		if r.filter(column) {
 			continue
 		}
 		newValue := newRow[idx]
+		// only update updated field
 		if reflect.DeepEqual(oldValue, newValue) {
 			continue
 		}
-		data[r.esField(column)] = newValue
+		data[r.fieldKey(column)] = newValue
 	}
 	return data
 }

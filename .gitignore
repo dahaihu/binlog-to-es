@@ -7,9 +7,10 @@
 !rule/*
 !sink
 !sink/*
-!example
-!example/*
 !utils
 !utils/*
 !.gitignore
 !go.mod
+!sql.py
+!metric
+!metric/*

@@ -1,9 +1,11 @@
 package sink
 
 import (
+	"binlog-to-es/metric"
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"binlog-to-es/config"
 	"binlog-to-es/rule"
@@ -11,6 +13,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -31,6 +34,7 @@ type msgType int64
 const (
 	MsgElasticsearch = 0
 	MsgMysqlPosition = 1
+	MsgMysqlGTID     = 2
 )
 
 type msg struct {
@@ -38,6 +42,7 @@ type msg struct {
 
 	Elasticsearch *rule.ElasticsearchReq
 	MysqlPosition *MysqlPosition
+	GTIDSet       mysql.GTIDSet
 }
 
 type MysqlPosition struct {
@@ -69,6 +74,7 @@ func newElasticsearchMsg(req *rule.ElasticsearchReq) *msg {
 
 type Handler struct {
 	canal.DummyEventHandler
+
 	ctx        context.Context
 	tableRules map[string]rule.Rule
 	sync       *Sync
@@ -139,18 +145,31 @@ func (h *Handler) OnTableChanged(database, table string) error {
 	return h.setRuleTableInfo(database, table)
 }
 
+func (h *Handler) OnGTID(gtid mysql.GTIDSet) error {
+	return nil
+}
+
 func (h *Handler) OnRow(e *canal.RowsEvent) error {
 	ruleKey := h.ruleKey(e.Table.Schema, e.Table.Name)
+	metric.SyncGap.Set(float64(time.Now().UnixMilli()/1000 - int64(e.Header.Timestamp)))
 	r, ok := h.tableRules[ruleKey]
 	if !ok {
 		return nil
 	}
 	switch e.Action {
 	case canal.UpdateAction:
+		if len(e.Rows)%2 == 1 {
+			return errors.New("mysql update action with ")
+		}
 		for idx := 0; idx < len(e.Rows); idx += 2 {
-			esReq, err := r.MakeESUpdateData(e.Rows[idx], e.Rows[idx+1])
+			esReq, err := r.MakeUpdateData(e.Rows[idx], e.Rows[idx+1])
 			if err != nil {
 				log.Fatal("")
+			}
+			if esReq.Script == "" && len(esReq.Data) == 0 {
+				log.Warnf("rule %s, encounter %s, %s. no update", r,
+					e.Rows[idx], e.Rows[idx+1])
+				return nil
 			}
 			if err := h.sync.cacheMsg(newElasticsearchMsg(esReq)); err != nil {
 				return err
@@ -164,9 +183,9 @@ func (h *Handler) OnRow(e *canal.RowsEvent) error {
 		for idx := 0; idx < len(e.Rows); idx++ {
 			switch e.Action {
 			case canal.InsertAction:
-				esReq, err = r.MakeESCreateData(e.Rows[idx])
+				esReq, err = r.MakeCreateData(e.Rows[idx])
 			case canal.DeleteAction:
-				esReq, err = r.MakeESDeleteData(e.Rows[idx])
+				esReq, err = r.MakeDeleteData(e.Rows[idx])
 			default:
 				return fmt.Errorf("invalid mysql %s", e.Action)
 			}

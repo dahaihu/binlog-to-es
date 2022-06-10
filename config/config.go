@@ -45,9 +45,10 @@ type DatabaseRule struct {
 }
 
 type Config struct {
-	Mysql         Mysql          `yaml:"mysql"`
-	Elasticsearch Elasticsearch  `yaml:"elasticsearch"`
-	DatabaseRules []DatabaseRule `yaml:"database_rules"`
+	PositionSaveInterval int64          `yaml:"position_save_interval"`
+	Mysql                Mysql          `yaml:"mysql"`
+	Elasticsearch        Elasticsearch  `yaml:"elasticsearch"`
+	DatabaseRules        []DatabaseRule `yaml:"database_rules"`
 }
 
 func ReadConfig(path string) (*Config, error) {

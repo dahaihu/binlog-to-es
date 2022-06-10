@@ -1,7 +1,8 @@
+position_save_interval: 10000
 mysql:
   addr: 127.0.0.1:3306
   user: root
-  password: ""
+  password: 669193
 elasticsearch:
   host: 127.0.0.1
   port: 9200

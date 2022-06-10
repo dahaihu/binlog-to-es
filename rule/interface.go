@@ -8,7 +8,7 @@ type Rule interface {
 	docID(row []interface{}) (string, error)
 
 	SetTableInfo(table *schema.Table)
-	MakeESCreateData(row []interface{}) (*ElasticsearchReq, error)
-	MakeESUpdateData(oldRow, newRow []interface{}) (*ElasticsearchReq, error)
-	MakeESDeleteData(row []interface{}) (*ElasticsearchReq, error)
+	MakeCreateData(row []interface{}) (*ElasticsearchReq, error)
+	MakeUpdateData(oldRow, newRow []interface{}) (*ElasticsearchReq, error)
+	MakeDeleteData(row []interface{}) (*ElasticsearchReq, error)
 }
